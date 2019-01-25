@@ -74,59 +74,79 @@ Catch {
 }
 
 Foreach($Entry in $CSVData) {
+
+    Write-Verbose $Entry
+
     # Verify that mandatory properties are defined for each object
     $DisplayName = $Entry.DisplayName
     $MailNickName = $Entry.MailNickName
     $UserPrincipalName = $Entry.UserPrincipalName
     $Password = $Entry.PasswordProfile
+    $ManagerUserPrincipalName = $Entry.ManagerUserPrincipalName
     
-If(!$DisplayName) {
-    Write-Warning '$DisplayName is not provided. Continue to the next record'
-    Continue
-}
-
-If(!$MailNickName) {
-     Write-Warning '$MailNickName is not provided. Continue to the next record'
-    Continue
-}
-
-If(!$UserPrincipalName) {
-    Write-Warning '$UserPrincipalName is not provided. Continue to the next record'
-    Continue
+    If(!$DisplayName) {
+        Write-Warning '$DisplayName is not provided. Continue to the next record'
+        Continue
     }
 
-If(!$Password) {
-    Write-Warning "Password is not provided for $DisplayName in the CSV file!"
-    $Password = Read-Host -Prompt "Enter desired Password" -AsSecureString
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
-    $Password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-    $PasswordProfile = New-Object -TypeName Microsoft.Open.AzureAD.Model.PasswordProfile
-    $PasswordProfile.Password = $Password
-    $PasswordProfile.EnforceChangePasswordPolicy = 1
-    $PasswordProfile.ForceChangePasswordNextLogin = 1
+    If(!$MailNickName) {
+        Write-Warning '$MailNickName is not provided. Continue to the next record'
+        Continue
     }
-Else {
-    $PasswordProfile = New-Object -TypeName Microsoft.Open.AzureAD.Model.PasswordProfile
-    $PasswordProfile.Password = $Password
-    $PasswordProfile.EnforceChangePasswordPolicy = 1
-    $PasswordProfile.ForceChangePasswordNextLogin = 1
-    }   
-    
-Try {    
-    New-AzureADUser -DisplayName $DisplayName `
-                    -AccountEnabled $true `
-                    -MailNickName $MailNickName `
-                    -UserPrincipalName $UserPrincipalName `
-                    -PasswordProfile $PasswordProfile `
-                    -City $Entry.City `
-                    -Country $Entry.Country `
-                    -Department $Entry.Department `
-                    -JobTitle $Entry.JobTitle `
-                    -Mobile $Entry.Mobile | Out-Null
-                        
-    Write-Verbose "$DisplayName : AAD Account is created successfully!"   
+
+    If(!$UserPrincipalName) {
+        Write-Warning '$UserPrincipalName is not provided. Continue to the next record'
+        Continue
+        }
+
+    If(!$Password) {
+        Write-Warning "Password is not provided for $DisplayName in the CSV file!"
+        $Password = Read-Host -Prompt "Enter desired Password" -AsSecureString
+        $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
+        $Password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        $PasswordProfile = New-Object -TypeName Microsoft.Open.AzureAD.Model.PasswordProfile
+        $PasswordProfile.Password = $Password
+        $PasswordProfile.EnforceChangePasswordPolicy = 1
+        $PasswordProfile.ForceChangePasswordNextLogin = 1
+        }
+    Else {
+        $PasswordProfile = New-Object -TypeName Microsoft.Open.AzureAD.Model.PasswordProfile
+        $PasswordProfile.Password = $Password
+        #$PasswordProfile.EnforceChangePasswordPolicy = 1
+        #$PasswordProfile.ForceChangePasswordNextLogin = 1
+        }   
+        
+    Try {    
+        New-AzureADUser -DisplayName $DisplayName `
+                        -AccountEnabled $true `
+                        -MailNickName $MailNickName `
+                        -UserPrincipalName $UserPrincipalName `
+                        -PasswordProfile $PasswordProfile `
+                        -City $Entry.City `
+                        -Country $Entry.Country `
+                        -Department $Entry.Department `
+                        -JobTitle $Entry.JobTitle `
+                        -Mobile $Entry.Mobile | Out-Null
+                            
     } 
-Catch {
-    Write-Error "$DisplayName : Error occurred while creating Azure AD Account. $_"
+    Catch {
+        Write-Error "$DisplayName : Error occurred while creating Azure AD Account. $_"
+    }
+                
+    Try {    
+        If ($ManagerUserPrincipalName) {
+            Set-AzureADUserManager -ObjectId $UserPrincipalName -RefObjectId (Get-AzureADUser -ObjectId $ManagerUserPrincipalName).ObjectId
+        }
+
+        $ThumbnailPhoto = "$pwd\UserImages\$DisplayName.jpg"
+        If (Test-Path "$pwd\UserImages\$DisplayName.jpg") {
+            Set-AzureADUserThumbnailPhoto -ObjectId (Get-AzureADUser -ObjectId $UserPrincipalName).ObjectId -FilePath $ThumbnailPhoto
+        }
+
+        Write-Verbose "$DisplayName : AAD Account is created successfully!"   
+
+    } 
+    Catch {
+        Write-Error "$DisplayName : Error occurred while updating Azure AD Account with manager and image. $_"
     }
 }
